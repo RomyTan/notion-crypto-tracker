@@ -21,7 +21,7 @@ def update_notion():
                 page_id=page["id"],
                 properties={
                     "Current Price": {"number": current_price},
-                    "Cryptocurrency": {"title": [{"text": {"content": name}}]},
+                    "Cryptocurrency": {"rich_text": [{"text": {"content": name}}]},
                 }
             )
             print(f"{symbol.upper()}: updated current price to ${current_price} and name to {name}")
