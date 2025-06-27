@@ -1,62 +1,86 @@
 import requests
 from notion_client import Client
 import os
+from datetime import datetime
 
+# ----------------------------
+# ENVIRONMENT VARIABLES
+# ----------------------------
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
+COINGECKO_API_URL = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
+COINGECKO_HISTORY_URL = "https://api.coingecko.com/api/v3/coins/{id}/history?date={date}"
 
+# ----------------------------
+# INIT NOTION CLIENT
+# ----------------------------
 notion = Client(auth=NOTION_TOKEN)
 
-def update_notion():
-    # fetch CoinGecko market data
-    coins = requests.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd").json()
+# ----------------------------
+# MAIN FUNCTION
+# ----------------------------
+def update_prices():
+    # 1. Get market data
+    response = requests.get(COINGECKO_API_URL)
+    if response.status_code != 200:
+        print("Failed to fetch CoinGecko data")
+        return
+    market_data = response.json()
 
-    # get database pages
+    # 2. Query Notion database
     query = notion.databases.query(database_id=NOTION_DATABASE_ID)
-
     for page in query["results"]:
         props = page["properties"]
-
-        # read symbol from title
         symbol = props["Symbol"]["title"][0]["plain_text"].lower()
+        purchase_date = props["Purchase Date"].get("date", {}).get("start", None)
 
-        # find coin in CoinGecko
-        matching = next((c for c in coins if c["symbol"] == symbol), None)
+        # 3. Find matching coin
+        matching = next((coin for coin in market_data if coin["symbol"] == symbol), None)
         if not matching:
-            print(f"{symbol.upper()}: coin not found on CoinGecko")
+            print(f"{symbol.upper()} not found on CoinGecko")
             continue
 
-        # current price
         current_price = matching["current_price"]
 
-        # get purchase date
-        purchase_date = props.get("Purchase Date", {}).get("date", {}).get("start", None)
+        # default purchase price
         purchase_price = None
-
         if purchase_date:
-            # fetch historical price
-            cg_id = matching["id"]
-            date_fmt = purchase_date.split("T")[0].split("-")
-            date_str = f"{date_fmt[2]}-{date_fmt[1]}-{date_fmt[0]}"
-            history_url = f"https://api.coingecko.com/api/v3/coins/{cg_id}/history?date={date_str}"
-            hist = requests.get(history_url).json()
-            try:
-                purchase_price = hist["market_data"]["current_price"]["usd"]
-            except:
-                print(f"{symbol.upper()}: failed to get historical price for {purchase_date}")
+            dt = datetime.fromisoformat(purchase_date)
+            date_str = dt.strftime("%d-%m-%Y")
+            history_url = COINGECKO_HISTORY_URL.format(id=matching["id"], date=date_str)
+            hist_response = requests.get(history_url)
+            if hist_response.status_code == 200:
+                hist_data = hist_response.json()
+                market_hist = hist_data.get("market_data", {}).get("current_price", {}).get("usd", None)
+                if market_hist:
+                    purchase_price = market_hist
+                    print(f"{symbol.upper()}: purchase price updated to {purchase_price}")
+                else:
+                    print(f"{symbol.upper()}: no price data on that date")
+            else:
+                print(f"{symbol.upper()}: failed to fetch historical price")
+        else:
+            print(f"{symbol.upper()}: no purchase date set")
 
-        # update Notion
+        # 4. Compose update properties
         update_props = {
             "Current Price": {"number": current_price}
         }
         if purchase_price:
             update_props["Purchase Price"] = {"number": purchase_price}
 
+        # 5. Update Notion page
         notion.pages.update(
             page_id=page["id"],
-            properties=update_props
+            properties=update_props,
+            icon={
+                "type": "external",
+                "external": {
+                    "url": matching["image"]
+                }
+            }
         )
-        print(f"{symbol.upper()}: updated current price to {current_price} and purchase price to {purchase_price}")
+        print(f"{symbol.upper()}: updated current price to ${current_price} and icon updated")
 
 if __name__ == "__main__":
-    update_notion()
+    update_prices()
