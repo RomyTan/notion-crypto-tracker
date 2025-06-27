@@ -1,13 +1,3 @@
-import requests
-from notion_client import Client
-import os
-
-NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
-NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID")
-COINGECKO_API_URL = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
-
-notion = Client(auth=NOTION_TOKEN)
-
 def update_notion():
     # fetch market data
     response = requests.get(COINGECKO_API_URL)
@@ -31,12 +21,9 @@ def update_notion():
                 page_id=page["id"],
                 properties={
                     "Current Price": {"number": current_price},
-                    "Cryptocurrency": {"rich_text": [{"text": {"content": name}}]},
+                    "Cryptocurrency": {"title": [{"text": {"content": name}}]},
                 }
             )
             print(f"{symbol.upper()}: updated current price to ${current_price} and name to {name}")
         else:
             print(f"{symbol.upper()} not found on CoinGecko")
-
-if __name__ == "__main__":
-    update_notion()
