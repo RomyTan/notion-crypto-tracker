@@ -31,7 +31,8 @@ def update_prices():
     query = notion.databases.query(database_id=NOTION_DATABASE_ID)
     for page in query["results"]:
         props = page["properties"]
-        symbol = props["Symbol"]["title"][0]["plain_text"].lower()
+        # renamed Coin column
+        symbol = props["Coin"]["title"][0]["plain_text"].lower()
         purchase_date = props["Purchase Date"].get("date", {}).get("start", None)
 
         # 3. Find matching coin
