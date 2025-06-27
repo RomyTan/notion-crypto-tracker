@@ -20,7 +20,7 @@ def update_notion():
     query = notion.databases.query(database_id=NOTION_DATABASE_ID)
     for page in query["results"]:
         props = page["properties"]
-        symbol = props["Symbol"]["title"][0]["plain_text"].lower()
+        symbol = props["Symbol"]["rich_text"][0]["plain_text"].lower()
         
         # find matching coin
         matching = next((c for c in coins if c["symbol"] == symbol), None)
